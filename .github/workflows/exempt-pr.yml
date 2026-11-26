@@ -1,0 +1,31 @@
+# pull_request variant, for comparison. Sets a differently named status.
+name: exempt-pr
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, edited]
+    branches: [develop]
+permissions: {}
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - run: |
+          echo "definition marker: pr-v1 (from main at creation)"
+          echo "event action: ${{ github.event.action }}  base: ${{ github.event.pull_request.base.ref }}"
+          test ! -f FAIL_TEST
+  mark:
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      statuses: write
+    steps:
+      - env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api "repos/${{ github.repository }}/statuses/${{ github.event.pull_request.head.sha }}" \
+            -f state=success -f context=review-loop-pr -f description="exempt (workflow, pr-v1)"
