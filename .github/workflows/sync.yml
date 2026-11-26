@@ -1,0 +1,35 @@
+# After ci succeeds on a push to main, open a PR into develop with the default
+# token, set the status on it, and try to merge it.
+name: sync
+on:
+  workflow_run:
+    workflows: [ci]
+    types: [completed]
+    branches: [main]
+permissions:
+  contents: write
+  pull-requests: write
+  statuses: write
+jobs:
+  sync:
+    if: github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -x
+          git fetch origin develop
+          if git merge-base --is-ancestor "$SHA" origin/develop; then
+            echo "develop already contains $SHA"; exit 0
+          fi
+          br="sync/main-${SHA:0:7}"
+          git push origin "$SHA:refs/heads/$br"
+          gh pr create --base develop --head "$br" --title "sync main ${SHA:0:7}" --body "automatic sync"
+          gh api "repos/$GITHUB_REPOSITORY/statuses/$SHA" \
+            -f state=success -f context=review-loop -f description="exempt: main sync"
+          gh pr merge "$br" --merge

@@ -1,0 +1,33 @@
+# pull_request_target variant: a read-only job runs the "test" on the PR code,
+# and a separate job that never checks out PR code sets the status.
+name: exempt-prt
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened, edited]
+    branches: [develop]
+permissions: {}
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - run: |
+          echo "definition marker: prt-v1 (from main at creation)"
+          echo "event action: ${{ github.event.action }}  base: ${{ github.event.pull_request.base.ref }}"
+          test ! -f FAIL_TEST
+  mark:
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      statuses: write
+    steps:
+      - env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api "repos/${{ github.repository }}/statuses/${{ github.event.pull_request.head.sha }}" \
+            -f state=success -f context=review-loop -f description="exempt (workflow, prt-v1)"
